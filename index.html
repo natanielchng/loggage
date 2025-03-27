@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+    <script type="text/javascript" src="//stuk.github.io/jszip/vendor/FileSaver.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <title>Loggage v1.0</title>
+</head>
+<body>
+<main class="container">
+    <h1>Loggage</h1>
+    <i>Convert CLI logs from network devices into screenshots!</i>
+    <hr/>
+
+    <!-- Input field for the search pattern -->
+    <article>
+        <h2>Step 1 --- Enter Search Pattern (e.g., "hostname>")</h2>
+        <input type="text" id="searchPattern" placeholder="Type the pattern...">
+        <small id="noSearchPatternError" style="display: none;">Please provide a search pattern!</small>
+    </article>
+    
+
+    <!-- File input to upload log file -->
+    <article>
+        <h2>Step 2 --- Upload Log File</h2>
+        <input type="file" id="fileInput">
+        <button class="secondary" id="fileSubmitBtn" style="display: none;">Get screenshots</button>
+    </article>
+
+
+    <article id="loading" aria-busy="true" style="display:none;"></article>
+    
+
+    <!-- Download button -->
+    <article id="downloadBtnWrapper" style="display: none;">
+        <h2>Step 3 --- Download Images</h2>
+        <!-- <button id="downloadBtn">Click to download</button> -->
+    </article>
+    
+
+    <!-- Display the split sections -->
+    <div id="textContainer"></div>
+
+</main>
+    
+
+    <script>
+        // Variable to store the file contents
+        let fileContents = "";
+        let generatedImages = [];  // Array to store the generated image data URLs
+
+        // used in: toggleDownloadButton()
+        const downloadBtnWrapper = document.getElementById('downloadBtnWrapper');
+        
+        // used in: validateSearchPattern()
+        const searchPattern = document.getElementById('searchPattern');
+        const noSearchPatternError = document.getElementById('noSearchPatternError');
+        
+        // used in: toggleLoading()
+        const loading = document.getElementById('loading');
+
+        // used in: toggleFileSubmitBtn()
+        const fileSubmitBtn = document.getElementById('fileSubmitBtn');
+
+        // const downloadBtn = document.getElementById('downloadBtn');
+        
+
+        /*
+            Functions
+        */
+
+
+        // used in: searchPattern event listener
+        function validateSearchPattern() {
+            if (searchPattern.value.trim() === "") {
+                searchPattern.setAttribute('aria-invalid', 'true');
+                noSearchPatternError.style.display = "block";
+                return false;  // Don't proceed if search pattern is empty
+            }
+            else {
+                searchPattern.setAttribute('aria-invalid', 'false');
+                noSearchPatternError.style.display = "none";
+                return true;
+            }
+        }
+
+        function toggleLoading(state) {
+            if (state == "on") {
+                loading.style.display = "block";
+            }
+            else {
+                loading.style.display = "none";
+            }
+        }
+
+        function toggleDownloadButton(state) {
+            if (state == "on") {
+                downloadBtnWrapper.style.display = "block";
+            }
+            else {
+                downloadBtnWrapper.style.display = "none";
+            }
+        }
+
+        function toggleFileSubmitBtn(state) {
+            if (state == "on") {
+                fileSubmitBtn.style.display = "block";
+            }
+            else {
+                fileSubmitBtn.style.display = "none";
+            }
+        }
+
+        function extractLinesByRanges(fileContents, lineRanges) { 
+            // Split the file contents into lines
+            const lines = fileContents.split('\n');
+
+            // Array to store the extracted lines
+            const extractedLines = [];
+
+            // Loop through each range and extract lines
+            for (let i = 0; i < lineRanges.length; i++) {
+                const startLine = lineRanges[i];
+                const endLine = i + 1 < lineRanges.length ? lineRanges[i + 1] - 1 : lines.length;
+
+                // Extract lines from the current range (startLine to endLine)
+                const rangeLines = lines.slice(startLine - 1, endLine);
+                const joinedLines = rangeLines.join('\n');
+
+                // Add the extracted lines to the final array
+                extractedLines.push(joinedLines);
+            }
+
+            return extractedLines;
+        }
+
+        function splitFileContentsByPatterns(fileContents, searchPattern) {
+            // Convert the comma-separated search pattern into an array
+            const patternsArray = searchPattern.split(',').map(p => p.trim());
+
+            // Split the file contents into lines
+            const lines = fileContents.split('\n');
+
+            // Array to store the line numbers where a pattern is found
+            const lineNumbers = [];
+
+            // Loop through each line
+            lines.forEach((line, index) => {
+                patternsArray.forEach(pattern => {
+                    if (line.includes(pattern)) {
+                        lineNumbers.push(index + 1);  // Store the line number (index + 1 to make it human-readable)
+                    }
+                });
+            });
+
+            const extractedTextArray = extractLinesByRanges(fileContents, lineNumbers);
+            displayExtractedText(extractedTextArray);
+        }
+
+        function displayExtractedText(extractedTextArray) {
+            // Get the container where the extracted text will be displayed
+            const container = document.getElementById('textContainer');
+            const loading = document.getElementById('loading');
+
+            loading.style.display = 'block';
+
+            // Clear any existing content
+            container.innerHTML = '';
+
+            let imagesGenerated = 0;
+            const totalImages = extractedTextArray.length;
+
+            // Now, loop through the extracted text again and render the div and images with the correct width
+            extractedTextArray.forEach((text, index) => {
+                const div = document.createElement('div');
+                div.textContent = text;
+
+                // Apply styling
+                div.style.fontFamily = 'monospace';
+                div.style.whiteSpace = 'pre-wrap';
+                div.style.padding = '10px';
+                div.style.border = '1px solid #ccc';
+                div.style.marginBottom = '10px';
+                div.style.color = 'white';
+                div.style.backgroundColor = 'black';
+                div.style.display = 'inline-block';  // Makes the div adjust width according to content
+                div.style.width = 'auto'; 
+
+                // Append the div to the container
+                container.appendChild(div);
+
+                // Use html2canvas to generate an image of the div
+                html2canvas(div).then(function(canvas) {
+                    // Create an img element and set the canvas as its source
+                    const img = document.createElement('img');
+                    img.src = canvas.toDataURL();
+
+                    // Hide the original div and show the image
+                    div.style.display = 'none';
+                    img.style.display = 'block';
+
+                    // Add the image data URL to the generated images array
+                    generatedImages.push(canvas.toDataURL());
+
+                    // Replace the div with the generated image
+                    container.appendChild(img);
+
+                    imagesGenerated++;
+                    
+                    // Check if all images are generated
+                    if (imagesGenerated === totalImages) {
+                        // Enable the download link once all images are generated
+                        loading.style.display = 'none';
+                        downloadBtnWrapper.style.display = 'block';
+
+                        const images = document.querySelectorAll('#textContainer img');
+                        const imageUrls = Array.from(images).map(img => img.src); // Create an array of image URLs
+                        GenerateZipDownload(imageUrls);
+                    }
+                });
+            });
+        }
+
+        async function GenerateZipDownload(imageUrls) {
+            
+            const zip = new JSZip();
+
+            // Loop through each image URL, fetch the image, and add it to the zip
+            for (const [index, imageUrl] of imageUrls.entries()) {
+                const file = await fetch(imageUrl).then(r => r.blob());
+                zip.file(`image_${index + 1}.jpg`, file); // Add the image to the zip with a unique name
+            }
+
+            // Generate the zip file
+            const zipData = await zip.generateAsync({
+                type: "blob",
+                streamFiles: true
+            });
+
+            // Create a download link for the zip file
+            const link = document.createElement('a');
+            const downloadButton = document.createElement('button');
+            downloadButton.textContent = "Click to download";
+            link.href = window.URL.createObjectURL(zipData);
+            link.download = `screenshots.zip`
+            link.appendChild(downloadButton);
+            downloadBtnWrapper.append(link);
+        }
+
+
+        /*
+            Event Listenters
+        */
+
+        document.getElementById('searchPattern').addEventListener('change', function(event) {
+            validateSearchPattern();
+        });
+
+        // Function to handle file reading
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            toggleFileSubmitBtn('on');
+            if (validateSearchPattern() == false) {
+                return;
+            }            
+        });
+
+
+        document.getElementById('fileSubmitBtn').addEventListener('click', function(event) {
+            // get the log file
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            // get the search pattern
+            const searchPatternValue = searchPattern.value;
+            
+            // reset and hide the download button
+            toggleDownloadButton();
+
+            // check if search pattern is ok
+            if (validateSearchPattern() == false) {
+                return;
+            }
+            
+            // file reading   
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    fileContents = e.target.result; // save contents of file in variable
+                    splitFileContentsByPatterns(fileContents, searchPatternValue);
+                };
+                reader.readAsText(file); // read file as text
+            }
+        });
+
+        // document.getElementById('downloadBtn').addEventListener('click', function() {
+        //     const images = document.querySelectorAll('#textContainer img');
+        //     const imageUrls = Array.from(images).map(img => img.src); // Create an array of image URLs
+        //     GenerateZipDownload(imageUrls);
+        // });
+    </script>
+
+</body>
+</html>
