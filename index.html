@@ -63,7 +63,7 @@
         const fileSubmitBtn = document.getElementById('fileSubmitBtn');     
         
         // used in: displayExtractedText()
-        const container = document.getElementById('textContainer');
+        const textContainer = document.getElementById('textContainer');
 
         /*
             Functions
@@ -151,46 +151,62 @@
             // display loading
             toggleLoading('on'); 
 
-            // Clear any existing content
-            container.innerHTML = '';
+            // clear existing content from textContainer
+            textContainer.innerHTML = '';
 
             let imagesGenerated = 0;
             const totalImages = extractedTextArray.length;
 
-            // Now, loop through the extracted text again and render the div and images with the correct width
+            // loop through the array of log text
+            // for each 'section'
             extractedTextArray.forEach((text, index) => {
-                const div = document.createElement('div');
-                div.textContent = text;
+
+                // create a dropdown element to open/close each section
+                const dropdown = document.createElement('details');
+
+                // name each dropdown after section no.
+                const dropdownTitle = document.createElement('summary');
+                dropdownTitle.textContent = `Section ${index + 1}`;
+                dropdown.appendChild(dropdownTitle);
+                dropdown.setAttribute('open','');
+
+                // create a div element to hold section contents
+                // place inside the dropdown
+                const textDiv = document.createElement('div');
+                dropdown.appendChild(textDiv);
+                textDiv.textContent = text;
+                textDiv.id = `text-section-${index + 1}`;
 
                 // Apply styling
-                div.style.fontFamily = 'monospace';
-                div.style.whiteSpace = 'pre-wrap';
-                div.style.padding = '10px';
-                div.style.border = '1px solid #ccc';
-                div.style.marginBottom = '10px';
-                div.style.color = 'white';
-                div.style.backgroundColor = 'black';
-                div.style.display = 'inline-block';  // Makes the div adjust width according to content
-                div.style.width = 'auto'; 
+                textDiv.style.fontFamily = 'monospace';
+                textDiv.style.whiteSpace = 'pre-wrap';
+                textDiv.style.padding = '10px';
+                textDiv.style.border = '1px solid #ccc';
+                textDiv.style.marginBottom = '10px';
+                textDiv.style.color = 'white';
+                textDiv.style.backgroundColor = 'black';
+                textDiv.style.display = 'inline-block';  // Makes the div adjust width according to content
+                textDiv.style.width = 'auto'; 
 
                 // Append the div to the container
-                container.appendChild(div);
+                textContainer.appendChild(dropdown);
 
                 // Use html2canvas to generate an image of the div
-                html2canvas(div).then(function(canvas) {
+                html2canvas(textDiv).then(function(canvas) {
+                    
                     // Create an img element and set the canvas as its source
                     const img = document.createElement('img');
                     img.src = canvas.toDataURL();
 
                     // Hide the original div and show the image
-                    div.style.display = 'none';
+                    textDiv.style.display = 'none';
                     img.style.display = 'block';
 
                     // Add the image data URL to the generated images array
                     generatedImages.push(canvas.toDataURL());
 
                     // Replace the div with the generated image
-                    container.appendChild(img);
+                    dropdown.appendChild(img);
 
                     imagesGenerated++;
                     
@@ -204,6 +220,9 @@
                         const imageUrls = Array.from(images).map(img => img.src);
                         GenerateZipDownload(imageUrls);
                     }
+
+                    // close the dropdown
+                    dropdown.removeAttribute('open');
                 });
             });
         }
